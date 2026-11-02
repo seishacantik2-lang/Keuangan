@@ -129,8 +129,18 @@ function render(D){
   $('#recent').innerHTML=D.recent.map(t=>{const p=t.k==='Pemasukan';return`<div class="tx"><div>${esc(t.t)}<small>${new Date(t.d+'T00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}, ${esc(t.g)}</small></div><b class="${p?'in':'out'}">${p?'+':'-'}${rp(t.j)}</b></div>`}).join('');
   $('#demo').hidden=GAS||D.recent.length>0;
 }
+let CUR=null;const CK='keuangan-cache-v1';
+function show(d){CUR=d;render(d);try{localStorage.setItem(CK,JSON.stringify(d))}catch(e){}}
+function applyTx(d,t){
+  const n=JSON.parse(JSON.stringify(d)),p=t.k==='Pemasukan';
+  n.saldo+=p?t.j:-t.j;n.sisa=Math.max(0,n.target-n.saldo);n.progress=n.target?n.saldo/n.target:0;
+  if(t.d.slice(0,7)===today().slice(0,7)){if(p)n.mi+=t.j;else{n.mo+=t.j;const c=n.cats.find(x=>x[0]===t.g);if(c)c[1]+=t.j;else n.cats.push([t.g,t.j]);n.cats.sort((x,y)=>y[1]-x[1])}}
+  n.recent=[t,...n.recent].sort((x,y)=>y.d.localeCompare(x.d)).slice(0,10);
+  n.bln=n.sisa===0?0:n.avg>0?Math.ceil(n.sisa/n.avg):null;
+  return n;
+}
 function refresh(){
-  if(GAS)google.script.run.withSuccessHandler(render).withFailureHandler(e=>toast('Gagal memuat data: '+e.message)).getData();
+  if(GAS)google.script.run.withSuccessHandler(show).withFailureHandler(e=>toast('Gagal memuat data: '+e.message)).getData();
   else render(calc());
 }
 function jenis(){$('#fg').innerHTML=J[$('#fk').value].map(x=>`<option>${x}</option>`).join('')}
@@ -139,7 +149,8 @@ function simpan(){
   const t={d:$('#fd').value,t:$('#ft').value.trim(),k:$('#fk').value,g:$('#fg').value,j:Number($('#fj').value)};
   if(!t.d||!t.t||!(t.j>0))return toast('Isi tanggal, keterangan, dan jumlah lebih dari 0.');
   dlg.close();
-  if(GAS)google.script.run.withSuccessHandler(d=>{render(d);toast('Transaksi disimpan ke Google Sheets.')}).withFailureHandler(e=>toast('Gagal menyimpan: '+e.message)).addTx(t);
+  if(GAS){if(CUR)show(applyTx(CUR,t));toast('Tersimpan, menyinkronkan ke Google Sheets...');
+    google.script.run.withSuccessHandler(()=>refresh()).withFailureHandler(e=>{toast('Gagal menyimpan: '+e.message);refresh()}).addTx(t)}
   else{S.tx.push(t);save();render(calc());toast('Transaksi disimpan.')}
 }
 function contoh(){
@@ -151,6 +162,7 @@ function contoh(){
 const APP_URL='https://script.google.com/macros/s/AKfycbyCki53AiteT7ErhNx3yMiQhXgzixykCmneMXsqaycXDmtTxKiDuNV-Yfb04_5HwSOv/exec';
 if(GAS)$('#mode').textContent='Terhubung ke Google Sheets';
 else $('#mode').innerHTML='Mode demo: data hanya di browser ini. <a href="'+APP_URL+'" target="_blank" rel="noopener" style="color:#fff;font-weight:700">Buka versi Google Sheets</a>';
+if(GAS)try{const c=JSON.parse(localStorage.getItem(CK));if(c)show(c)}catch(e){}
 refresh();
 </script>
 </body>
